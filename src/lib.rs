@@ -5,12 +5,10 @@ use std::collections::HashMap;
 
 use crate::partial_tries::insert_proof;
 use anyhow::{anyhow, Result};
-use eth_trie_utils::nibbles::Nibbles;
 use eth_trie_utils::partial_trie::{HashedPartialTrie, Node, PartialTrie};
-use ethers::etherscan::contract;
 use ethers::prelude::*;
 use ethers::types::GethDebugTracerType;
-use ethers::utils::{keccak256, rlp};
+use ethers::utils::keccak256;
 use plonky2::field::goldilocks_field::GoldilocksField;
 use plonky2::plonk::config::KeccakGoldilocksConfig;
 use plonky2::util::timing::TimingTree;
@@ -114,9 +112,9 @@ pub async fn get_block_metadata(
     let block = provider
         .get_block(block_number)
         .await?
-        .ok_or(anyhow!("Block not found. Block number: {}", block_number))?;
+        .ok_or_else(|| anyhow!("Block not found. Block number: {}", block_number))?;
     Ok(BlockMetadata {
-        block_beneficiary: block.author.unwrap().into(),
+        block_beneficiary: block.author.unwrap(),
         block_timestamp: block.timestamp,
         block_number: U256([block_number.0[0], 0, 0, 0]),
         block_difficulty: block.difficulty,
