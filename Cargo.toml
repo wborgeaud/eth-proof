@@ -1,0 +1,24 @@
+[package]
+name = "eth-proof"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ethers = "2.0.7"
+tokio = { version = "1", features = ["full"] }
+anyhow = "1.0.71"
+#plonky2 = "0.1.3"
+plonky2 = "0.1.3"
+plonky2_evm = { path= "../../Mir/plonky2/evm" }
+flexi_logger = { version = "0.25.1", features = ["async"] }
+#eth_trie_utils = "0.6.0"
+eth_trie_utils = { path = "../../Mir/eth_trie_utils" }
+
+[patch."https://github.com/mir-protocol/plonky2.git"]
+plonky2_evm = { path= "../../Mir/plonky2/evm" }
+
+[patch.crates-io]
+#plonky2 = { git = "https://github.com/mir-protocol/plonky2.git", rev = "6fa59d204fbdf780c02bce41edc1144f436e49e1" }
+plonky2 = { git = "https://github.com/mir-protocol/plonky2.git", rev = "202985b24f79b354cfdfa2e5c5288e5fbc3f1a41" }
