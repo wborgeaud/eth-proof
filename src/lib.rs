@@ -27,9 +27,11 @@ pub async fn get_proof(
     Ok(proof.account_proof)
 }
 
-pub async fn get_txn(hash: H256, provider: &Provider<Http>) -> Result<()> {
+pub async fn prove_txn(hash: H256, provider: &Provider<Http>) -> Result<()> {
     let proof = provider.get_transaction(hash);
-    let txn = proof.await?.ok_or(anyhow!("Transaction not found."))?;
+    let txn = proof
+        .await?
+        .ok_or_else(|| anyhow!("Transaction not found."))?;
     dbg!(&txn);
     let block_number = txn.block_number.ok_or(anyhow!("No block number?"))?;
     let mut trie = HashedPartialTrie::new(Node::Empty);
