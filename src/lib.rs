@@ -22,13 +22,14 @@ use plonky2_evm::prover::dont_prove_with_outputs;
 
 pub async fn get_proof(
     address: Address,
+    locations: Vec<H256>,
     block_number: U64,
     provider: &Provider<Http>,
-) -> Result<Vec<Bytes>> {
-    let proof = provider.get_proof(address, vec![], Some(block_number.into()));
+) -> Result<(Vec<Bytes>, Vec<StorageProof>, H256)> {
+    let proof = provider.get_proof(address, locations, Some(block_number.into()));
     let proof = proof.await?;
     dbg!(&proof);
-    Ok(proof.account_proof)
+    Ok((proof.account_proof, proof.storage_proof, proof.storage_hash))
 }
 
 fn tracing_options() -> GethDebugTracingOptions {
@@ -66,12 +67,31 @@ pub async fn prove_txn(hash: H256, provider: &Provider<Http>) -> Result<()> {
         .block_number
         .ok_or_else(|| anyhow!("No block number?"))?;
     let mut contract_codes = contract_codes();
+    let mut storage_tries = vec![];
     let mut trie = HashedPartialTrie::new(Node::Empty);
     for (address, account) in accounts {
         dbg!(address, &account);
-        let proof = get_proof(address, block_number - 1, provider).await?;
-        insert_proof(&mut trie, address, proof)?;
-        if let Some(code) = account.code {
+        let AccountState { code, storage, .. } = account;
+        let empty_storage = storage.is_none();
+        let storage_keys = storage
+            .unwrap_or_default()
+            .keys()
+            .copied()
+            .collect::<Vec<_>>();
+        let (proof, storage_proof, storage_hash) =
+            get_proof(address, storage_keys, block_number - 1, provider).await?;
+        let key = keccak256(address.0);
+        insert_proof(&mut trie, key, proof)?;
+        if !empty_storage {
+            let mut storage_trie = HashedPartialTrie::new(Node::Empty);
+            for sp in storage_proof {
+                dbg!(sp.key, sp.value);
+                insert_proof(&mut storage_trie, keccak256(sp.key.0), sp.proof)?;
+            }
+            assert_eq!(storage_hash, storage_trie.hash());
+            storage_tries.push((key.into(), storage_trie));
+        }
+        if let Some(code) = code {
             let code = hex::decode(&code[2..])?;
             let codehash = keccak256(&code);
             contract_codes.insert(codehash.into(), code);
@@ -81,7 +101,7 @@ pub async fn prove_txn(hash: H256, provider: &Provider<Http>) -> Result<()> {
     let block_metadata = get_block_metadata(block_number, &txn, provider).await?;
     dbg!(&trie);
     let txn_rlp = txn.rlp().to_vec();
-    prove(txn_rlp, block_metadata, trie, contract_codes);
+    prove(txn_rlp, block_metadata, trie, contract_codes, storage_tries);
 
     Ok(())
 }
@@ -111,6 +131,7 @@ fn prove(
     block_metadata: BlockMetadata,
     state_trie: HashedPartialTrie,
     contract_code: HashMap<H256, Vec<u8>>,
+    storage_tries: Vec<(H256, HashedPartialTrie)>,
 ) {
     let inputs = GenerationInputs {
         signed_txns: vec![txn_rlp],
@@ -118,7 +139,7 @@ fn prove(
             state_trie,
             transactions_trie: Default::default(),
             receipts_trie: Default::default(),
-            storage_tries: vec![],
+            storage_tries,
         },
         contract_code,
         block_metadata,

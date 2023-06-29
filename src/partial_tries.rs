@@ -5,12 +5,7 @@ use ethers::prelude::*;
 use ethers::utils::keccak256;
 use ethers::utils::rlp;
 
-pub fn insert_proof(
-    trie: &mut HashedPartialTrie,
-    address: Address,
-    proof: Vec<Bytes>,
-) -> Result<()> {
-    let key = keccak256(address.0);
+pub fn insert_proof(trie: &mut HashedPartialTrie, key: [u8; 32], proof: Vec<Bytes>) -> Result<()> {
     let mut nibbles = Nibbles::from_bytes_be(&key)?;
     let mut current_prefix = Nibbles {
         count: 0,
