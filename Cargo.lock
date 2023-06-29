@@ -827,6 +827,7 @@ dependencies = [
  "eth_trie_utils",
  "ethers",
  "flexi_logger",
+ "hex",
  "plonky2",
  "plonky2_evm",
  "tokio",

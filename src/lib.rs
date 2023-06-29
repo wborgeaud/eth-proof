@@ -1,10 +1,13 @@
 mod partial_tries;
 pub mod utils;
 
+use std::collections::HashMap;
+
 use crate::partial_tries::insert_proof;
 use anyhow::{anyhow, Result};
 use eth_trie_utils::nibbles::Nibbles;
 use eth_trie_utils::partial_trie::{HashedPartialTrie, Node, PartialTrie};
+use ethers::etherscan::contract;
 use ethers::prelude::*;
 use ethers::types::GethDebugTracerType;
 use ethers::utils::{keccak256, rlp};
@@ -38,6 +41,10 @@ fn tracing_options() -> GethDebugTracingOptions {
     }
 }
 
+fn contract_codes() -> HashMap<H256, Vec<u8>> {
+    vec![(keccak256([]).into(), vec![])].into_iter().collect()
+}
+
 pub async fn prove_txn(hash: H256, provider: &Provider<Http>) -> Result<()> {
     let txn = provider.get_transaction(hash);
     let txn = txn
@@ -58,16 +65,23 @@ pub async fn prove_txn(hash: H256, provider: &Provider<Http>) -> Result<()> {
     let block_number = txn
         .block_number
         .ok_or_else(|| anyhow!("No block number?"))?;
+    let mut contract_codes = contract_codes();
     let mut trie = HashedPartialTrie::new(Node::Empty);
-    for &account in accounts.keys() {
-        let proof = get_proof(account, block_number - 1, provider).await?;
-        insert_proof(&mut trie, account, proof)?;
+    for (address, account) in accounts {
+        dbg!(address, &account);
+        let proof = get_proof(address, block_number - 1, provider).await?;
+        insert_proof(&mut trie, address, proof)?;
+        if let Some(code) = account.code {
+            let code = hex::decode(&code[2..])?;
+            let codehash = keccak256(&code);
+            contract_codes.insert(codehash.into(), code);
+        }
     }
 
     let block_metadata = get_block_metadata(block_number, &txn, provider).await?;
     dbg!(&trie);
     let txn_rlp = txn.rlp().to_vec();
-    prove(txn_rlp, block_metadata, trie);
+    prove(txn_rlp, block_metadata, trie, contract_codes);
 
     Ok(())
 }
@@ -92,7 +106,12 @@ pub async fn get_block_metadata(
     })
 }
 
-fn prove(txn_rlp: Vec<u8>, block_metadata: BlockMetadata, state_trie: HashedPartialTrie) {
+fn prove(
+    txn_rlp: Vec<u8>,
+    block_metadata: BlockMetadata,
+    state_trie: HashedPartialTrie,
+    contract_code: HashMap<H256, Vec<u8>>,
+) {
     let inputs = GenerationInputs {
         signed_txns: vec![txn_rlp],
         tries: TrieInputs {
@@ -101,7 +120,7 @@ fn prove(txn_rlp: Vec<u8>, block_metadata: BlockMetadata, state_trie: HashedPart
             receipts_trie: Default::default(),
             storage_tries: vec![],
         },
-        contract_code: vec![(keccak256(&[]).into(), vec![])].into_iter().collect(),
+        contract_code,
         block_metadata,
         addresses: vec![],
     };
