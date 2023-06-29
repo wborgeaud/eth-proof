@@ -6,6 +6,7 @@ use anyhow::{anyhow, Result};
 use eth_trie_utils::nibbles::Nibbles;
 use eth_trie_utils::partial_trie::{HashedPartialTrie, Node, PartialTrie};
 use ethers::prelude::*;
+use ethers::types::GethDebugTracerType;
 use ethers::utils::{keccak256, rlp};
 use plonky2::field::goldilocks_field::GoldilocksField;
 use plonky2::plonk::config::KeccakGoldilocksConfig;
@@ -27,22 +28,43 @@ pub async fn get_proof(
     Ok(proof.account_proof)
 }
 
+fn tracing_options() -> GethDebugTracingOptions {
+    GethDebugTracingOptions {
+        tracer: Some(GethDebugTracerType::BuiltInTracer(
+            GethDebugBuiltInTracerType::PreStateTracer,
+        )),
+
+        ..GethDebugTracingOptions::default()
+    }
+}
+
 pub async fn prove_txn(hash: H256, provider: &Provider<Http>) -> Result<()> {
-    let proof = provider.get_transaction(hash);
-    let txn = proof
+    let txn = provider.get_transaction(hash);
+    let txn = txn
         .await?
         .ok_or_else(|| anyhow!("Transaction not found."))?;
-    dbg!(&txn);
-    let block_number = txn.block_number.ok_or(anyhow!("No block number?"))?;
+    let trace = provider
+        .debug_trace_transaction(hash, tracing_options())
+        .await?;
+    let accounts =
+        if let GethTrace::Known(GethTraceFrame::PreStateTracer(PreStateFrame::Default(accounts))) =
+            trace
+        {
+            accounts.0
+        } else {
+            panic!("wtf?");
+        };
+
+    let block_number = txn
+        .block_number
+        .ok_or_else(|| anyhow!("No block number?"))?;
     let mut trie = HashedPartialTrie::new(Node::Empty);
-    let from_proof = get_proof(txn.from, block_number - 1, provider).await?;
-    insert_proof(&mut trie, txn.from, from_proof)?;
-    let to_proof = get_proof(txn.to.unwrap(), block_number - 1, provider).await?;
-    insert_proof(&mut trie, txn.to.unwrap(), to_proof)?;
+    for &account in accounts.keys() {
+        let proof = get_proof(account, block_number - 1, provider).await?;
+        insert_proof(&mut trie, account, proof)?;
+    }
+
     let block_metadata = get_block_metadata(block_number, &txn, provider).await?;
-    let coinbase_proof =
-        get_proof(block_metadata.block_beneficiary, block_number - 1, provider).await?;
-    insert_proof(&mut trie, block_metadata.block_beneficiary, coinbase_proof)?;
     dbg!(&trie);
     let txn_rlp = txn.rlp().to_vec();
     prove(txn_rlp, block_metadata, trie);
