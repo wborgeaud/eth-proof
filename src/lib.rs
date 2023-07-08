@@ -1,14 +1,18 @@
 mod partial_tries;
 pub mod utils;
 
-use std::collections::HashMap;
+use ::core::panic;
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::str::FromStr;
 
 use crate::partial_tries::insert_proof;
 use anyhow::{anyhow, Result};
+use eth_trie_utils::nibbles::Nibbles;
 use eth_trie_utils::partial_trie::{HashedPartialTrie, Node, PartialTrie};
 use ethers::prelude::*;
 use ethers::types::GethDebugTracerType;
 use ethers::utils::keccak256;
+use ethers::utils::rlp;
 use plonky2::field::goldilocks_field::GoldilocksField;
 use plonky2::plonk::config::KeccakGoldilocksConfig;
 use plonky2::util::timing::TimingTree;
@@ -23,11 +27,22 @@ pub async fn get_proof(
     locations: Vec<H256>,
     block_number: U64,
     provider: &Provider<Http>,
-) -> Result<(Vec<Bytes>, Vec<StorageProof>, H256)> {
+) -> Result<(Vec<Bytes>, Vec<StorageProof>, H256, bool)> {
     let proof = provider.get_proof(address, locations, Some(block_number.into()));
     let proof = proof.await?;
     dbg!(&proof);
-    Ok((proof.account_proof, proof.storage_proof, proof.storage_hash))
+    let is_empty = proof.balance.is_zero()
+        && proof.nonce.is_zero()
+        && proof.code_hash
+            == H256::from_str(
+                "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+            )?;
+    Ok((
+        proof.account_proof,
+        proof.storage_proof,
+        proof.storage_hash,
+        is_empty,
+    ))
 }
 
 fn tracing_options() -> GethDebugTracingOptions {
@@ -49,6 +64,7 @@ pub async fn prove_txn(hash: H256, provider: &Provider<Http>) -> Result<()> {
     let txn = txn
         .await?
         .ok_or_else(|| anyhow!("Transaction not found."))?;
+    let chain_id = txn.chain_id.unwrap();
     let trace = provider
         .debug_trace_transaction(hash, tracing_options())
         .await?;
@@ -68,7 +84,7 @@ pub async fn prove_txn(hash: H256, provider: &Provider<Http>) -> Result<()> {
     let mut storage_tries = vec![];
     let mut trie = HashedPartialTrie::new(Node::Empty);
     for (address, account) in accounts {
-        dbg!(address, &account);
+        // dbg!(address, &account);
         let AccountState { code, storage, .. } = account;
         let empty_storage = storage.is_none();
         let storage_keys = storage
@@ -76,15 +92,27 @@ pub async fn prove_txn(hash: H256, provider: &Provider<Http>) -> Result<()> {
             .keys()
             .copied()
             .collect::<Vec<_>>();
-        let (proof, storage_proof, storage_hash) =
+        let (proof, storage_proof, storage_hash, _) =
             get_proof(address, storage_keys, block_number - 1, provider).await?;
         let key = keccak256(address.0);
-        insert_proof(&mut trie, key, proof)?;
+        insert_proof(
+            &mut trie,
+            key,
+            proof,
+            true,                // fix this
+            &mut HashSet::new(), // fix this
+        )?;
         if !empty_storage {
             let mut storage_trie = HashedPartialTrie::new(Node::Empty);
             for sp in storage_proof {
-                dbg!(sp.key, sp.value);
-                insert_proof(&mut storage_trie, keccak256(sp.key.0), sp.proof)?;
+                // dbg!(sp.key, sp.value);
+                insert_proof(
+                    &mut storage_trie,
+                    keccak256(sp.key.0),
+                    sp.proof,
+                    true,                // fix this
+                    &mut HashSet::new(), // fix this
+                )?;
             }
             assert_eq!(storage_hash, storage_trie.hash());
             storage_tries.push((key.into(), storage_trie));
@@ -96,8 +124,8 @@ pub async fn prove_txn(hash: H256, provider: &Provider<Http>) -> Result<()> {
         }
     }
 
-    let block_metadata = get_block_metadata(block_number, &txn, provider).await?;
-    dbg!(&trie);
+    let (block_metadata, _) = get_block_metadata(block_number, chain_id, provider).await?;
+    // dbg!(&trie);
     let txn_rlp = txn.rlp().to_vec();
     prove(txn_rlp, block_metadata, trie, contract_codes, storage_tries);
 
@@ -106,22 +134,25 @@ pub async fn prove_txn(hash: H256, provider: &Provider<Http>) -> Result<()> {
 
 pub async fn get_block_metadata(
     block_number: U64,
-    txn: &Transaction,
+    block_chain_id: U256,
     provider: &Provider<Http>,
-) -> Result<BlockMetadata> {
+) -> Result<(BlockMetadata, H256)> {
     let block = provider
         .get_block(block_number)
         .await?
         .ok_or_else(|| anyhow!("Block not found. Block number: {}", block_number))?;
-    Ok(BlockMetadata {
-        block_beneficiary: block.author.unwrap(),
-        block_timestamp: block.timestamp,
-        block_number: U256([block_number.0[0], 0, 0, 0]),
-        block_difficulty: block.difficulty,
-        block_gaslimit: block.gas_limit,
-        block_chain_id: txn.chain_id.unwrap(),
-        block_base_fee: block.base_fee_per_gas.unwrap(),
-    })
+    Ok((
+        BlockMetadata {
+            block_beneficiary: block.author.unwrap(),
+            block_timestamp: block.timestamp,
+            block_number: U256([block_number.0[0], 0, 0, 0]),
+            block_difficulty: block.difficulty,
+            block_gaslimit: block.gas_limit,
+            block_chain_id,
+            block_base_fee: block.base_fee_per_gas.unwrap(),
+        },
+        block.state_root,
+    ))
 }
 
 fn prove(
@@ -142,6 +173,7 @@ fn prove(
         contract_code,
         block_metadata,
         addresses: vec![],
+        withdrawals: vec![],
     };
     let proof_run_res = dont_prove_with_outputs::<GoldilocksField, KeccakGoldilocksConfig, 2>(
         &AllStark::default(),
@@ -150,4 +182,241 @@ fn prove(
         &mut TimingTree::default(),
     );
     dbg!(proof_run_res);
+}
+
+fn account_is_empty(account: &AccountState) -> bool {
+    (account.nonce.is_none() || account.nonce == Some(U256::zero()))
+        && (account.balance.is_none() || account.balance == Some(U256::zero()))
+        && (account.code.is_none() || account.code == Some("0x".to_string()))
+}
+
+pub async fn prove_block(block_number: u64, provider: &Provider<Http>) -> Result<()> {
+    let block = provider
+        .get_block(block_number)
+        .await?
+        .ok_or_else(|| anyhow!("Block not found. Block number: {}", block_number))?;
+    let mut trie = HashedPartialTrie::new(Node::Empty);
+    let mut dont_touch_these_nibbles = HashSet::new();
+    let mut contract_codes = contract_codes();
+    let mut storage_tries = vec![];
+    let mut txn_rlps = vec![];
+    let mut chain_id = U256::one();
+    let mut alladdrs = vec![];
+    if let Some(withdrawals) = &block.withdrawals {
+        for withdrawal in withdrawals {
+            alladdrs.push(withdrawal.address);
+            let (proof, _, _, is_empty) = get_proof(
+                withdrawal.address,
+                vec![],
+                (block_number - 1).into(),
+                provider,
+            )
+            .await?;
+            let key = keccak256(withdrawal.address.0);
+            insert_proof(
+                &mut trie,
+                key,
+                proof,
+                !is_empty, /* is this correct? */
+                &mut dont_touch_these_nibbles,
+            )?;
+        }
+    }
+    let mut all_accounts = BTreeMap::<Address, AccountState>::new();
+    for hash in block.transactions.into_iter() {
+        let txn = provider.get_transaction(hash);
+        let txn = txn
+            .await?
+            .ok_or_else(|| anyhow!("Transaction not found."))?;
+        // chain_id = txn.chain_id.unwrap();
+        let trace = provider
+            .debug_trace_transaction(hash, tracing_options())
+            .await?;
+        let accounts = if let GethTrace::Known(GethTraceFrame::PreStateTracer(
+            PreStateFrame::Default(accounts),
+        )) = trace
+        {
+            accounts.0
+        } else {
+            panic!("wtf?");
+        };
+        for (address, account) in accounts {
+            alladdrs.push(address);
+            if address == H160::from_str("0xd3b6e89a72fdd628d87168979fe7075e1ee21bb4")? {
+                dbg!(&account);
+            }
+            if let Some(acc) = all_accounts.get(&address) {
+                let mut acc = acc.clone();
+                let mut new_store = acc.storage.clone().unwrap_or_default();
+                let stor = account.storage;
+                if let Some(s) = stor {
+                    for (k, v) in s {
+                        new_store.insert(k, v);
+                    }
+                }
+                acc.storage = if new_store.is_empty() {
+                    None
+                } else {
+                    Some(new_store)
+                };
+                all_accounts.insert(address, acc);
+            } else {
+                all_accounts.insert(address, account);
+            }
+        }
+        if txn.to
+            == Some(Address::from_str(
+                "0x2698931002B10A2206c3F8B36c8c168b01EA6c25",
+            )?)
+        {
+            dbg!(hex::encode(txn.rlp()));
+        }
+        txn_rlps.push(txn.rlp().to_vec());
+    }
+    dbg!(all_accounts.keys().collect::<Vec<_>>());
+
+    for (address, account) in all_accounts {
+        dbg!(address, &account);
+        // let account_is_empty = account_is_empty(&account);
+        let AccountState { code, storage, .. } = account;
+        let empty_storage = storage.is_none();
+        let mut storage_keys = storage
+            .unwrap_or_default()
+            .keys()
+            .copied()
+            .collect::<Vec<_>>();
+        if address == Address::from_str("0xa0e4a0ba6ac72d327b5ea8552379bfeac10b2191")? {
+            storage_keys.push(H256::from_str(
+                "0x2b5eb822a94e5a95d8bbbbe98455f9c5ede1047ad1e9476e52a254cae3ebe7b8",
+            )?);
+        }
+        if address == Address::from_str("0x76be3b62873462d2142405439777e971754e8e77")? {
+            storage_keys.push(H256::from_str(
+                "0xaed6fd5bd43de558ade6b05a13bf55867e47a421fec5cacb0af3ce9b8c9974c5",
+            )?);
+        }
+        if address == Address::from_str("0x50d1c9771902476076ecfc8b2a83ad6b9355a4c9")? {
+            for s in &storage_keys {
+                dbg!(s, keccak256(s));
+            }
+        }
+        let (proof, storage_proof, storage_hash, account_is_empty) =
+            get_proof(address, storage_keys, (block_number - 1).into(), provider).await?;
+        dbg!(&storage_proof);
+        let key = keccak256(address.0);
+        insert_proof(
+            &mut trie,
+            key,
+            proof,
+            !account_is_empty,
+            &mut dont_touch_these_nibbles, // 1750190, 1751368
+        )?;
+        if !empty_storage {
+            let mut storage_trie = HashedPartialTrie::new(Node::Empty);
+            let mut dont_touch_these_nibbles_storage = HashSet::new();
+            for sp in storage_proof {
+                dbg!(sp.key, sp.value);
+                insert_proof(
+                    &mut storage_trie,
+                    keccak256(sp.key.0),
+                    sp.proof,
+                    !sp.value.is_zero(),
+                    &mut dont_touch_these_nibbles_storage,
+                )?;
+                if !sp.value.is_zero() {
+                    let x = rlp::decode::<U256>(
+                        storage_trie
+                            .get(Nibbles::from_bytes_be(&keccak256(sp.key.0))?)
+                            .unwrap(),
+                    )?;
+                    dbg!(x, sp.value);
+                    assert_eq!(x, sp.value);
+                }
+            }
+            let h = storage_trie.hash();
+            dbg!(address, storage_hash, h, &storage_trie);
+            assert_eq!(storage_hash, storage_trie.hash());
+            storage_tries.push((key.into(), storage_trie));
+        }
+        if let Some(code) = code {
+            let code = hex::decode(&code[2..])?;
+            let codehash = keccak256(&code);
+            contract_codes.insert(codehash.into(), code);
+        }
+    }
+
+    let prev_block = provider
+        .get_block(block_number - 1)
+        .await?
+        .ok_or_else(|| anyhow!("Block not found. Block number: {}", block_number - 1))?;
+    assert_eq!(prev_block.state_root, trie.hash());
+    // panic!();
+
+    let (block_metadata, final_hash) =
+        get_block_metadata(block_number.into(), chain_id, provider).await?;
+    let withdrawals = if let Some(v) = block.withdrawals {
+        v.into_iter()
+            .map(|w| (w.address, w.amount * 1_000_000_000)) // Alchemy returns Gweis for some reason
+            .collect()
+    } else {
+        vec![]
+    };
+    {
+        for addr in alladdrs {
+            // for addr in vec![Address::from_str(
+            //     "0x9bdae056643032a657f3945be80c0c9304add08b",
+            // )?] {
+            let proof = provider
+                .get_proof(addr, vec![], Some(block_number.into()))
+                .await?;
+            dbg!(proof);
+        }
+    }
+    // let txn_rlps = txn_rlps[..5].to_vec();
+    prove_block_real_deal(
+        txn_rlps,
+        block_metadata,
+        trie,
+        contract_codes,
+        storage_tries,
+        withdrawals,
+        final_hash,
+    );
+
+    Ok(())
+}
+
+fn prove_block_real_deal(
+    signed_txns: Vec<Vec<u8>>,
+    block_metadata: BlockMetadata,
+    state_trie: HashedPartialTrie,
+    contract_code: HashMap<H256, Vec<u8>>,
+    storage_tries: Vec<(H256, HashedPartialTrie)>,
+    withdrawals: Vec<(Address, U256)>,
+    final_hash: H256,
+) {
+    let inputs = GenerationInputs {
+        signed_txns,
+        tries: TrieInputs {
+            state_trie,
+            transactions_trie: Default::default(),
+            receipts_trie: Default::default(),
+            storage_tries,
+        },
+        withdrawals,
+        contract_code,
+        block_metadata,
+        addresses: vec![],
+    };
+    let proof_run_res = dont_prove_with_outputs::<GoldilocksField, KeccakGoldilocksConfig, 2>(
+        &AllStark::default(),
+        &StarkConfig::standard_fast_config(),
+        inputs,
+        &mut TimingTree::default(),
+    );
+    dbg!(&proof_run_res);
+    if let Ok((pv, _)) = proof_run_res {
+        dbg!(&pv);
+        dbg!(pv.trie_roots_after.state_root == final_hash);
+    }
 }
