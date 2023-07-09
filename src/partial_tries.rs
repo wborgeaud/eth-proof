@@ -2,9 +2,8 @@ use std::collections::HashSet;
 
 use anyhow::Result;
 use eth_trie_utils::nibbles::Nibbles;
-use eth_trie_utils::partial_trie::{HashedPartialTrie, Node, PartialTrie};
+use eth_trie_utils::partial_trie::{HashedPartialTrie, PartialTrie};
 use ethers::prelude::*;
-use ethers::utils::keccak256;
 use ethers::utils::rlp;
 
 pub fn insert_proof(
@@ -17,14 +16,13 @@ pub fn insert_proof(
     let mut nibbles = Nibbles::from_bytes_be(&key)?;
     let mut current_prefix = Nibbles {
         count: 0,
-        packed: U256::zero(), // 0x17470ae756f067c9dbf8b78ad86d31a1283256cb0f76ed2fc86e8ba63cfe7c5c
+        packed: U256::zero(),
     };
     dbg!(nibbles);
     dbg!(&proof);
-    let proof_len = proof.len();
-    for (p_ind, p) in proof.into_iter().enumerate() {
+    let _proof_len = proof.len();
+    for (_p_ind, p) in proof.into_iter().enumerate() {
         let a = rlp::decode_list::<Vec<u8>>(&p);
-        // dbg!(&a);
         dbg!(current_prefix, nibbles, a.len());
         match a.len() {
             17 => {
@@ -42,17 +40,10 @@ pub fn insert_proof(
                     if dont_touch_these_nibbles.contains(&new_prefix) {
                         continue;
                     }
-                    dbg!(
-                        new_prefix,
-                        trie.get(new_prefix),
-                        trie.whatsup(&mut new_prefix.clone()),
-                        &a[i as usize],
-                    );
                     if !a[i as usize].is_empty() && !trie.whatsup(&mut new_prefix.clone()) {
                         let hash = H256::from_slice(&a[i as usize]);
                         trie.insert(new_prefix, hash);
                     }
-                    dbg!(new_prefix, trie.get(new_prefix));
                 }
                 current_prefix.push_nibble_back(nibble);
             }
@@ -160,7 +151,6 @@ pub fn insert_proof(
             _ => panic!("wtf?"),
         }
     }
-    // dbg!(trie.hash());
 
     Ok(())
 }

@@ -22,6 +22,10 @@ use plonky2_evm::generation::{GenerationInputs, TrieInputs};
 use plonky2_evm::proof::BlockMetadata;
 use plonky2_evm::prover::dont_prove_with_outputs;
 
+fn empty_hash() -> H256 {
+    H256::from_str("0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470").unwrap()
+}
+
 pub async fn get_proof(
     address: Address,
     locations: Vec<H256>,
@@ -31,12 +35,8 @@ pub async fn get_proof(
     let proof = provider.get_proof(address, locations, Some(block_number.into()));
     let proof = proof.await?;
     dbg!(&proof);
-    let is_empty = proof.balance.is_zero()
-        && proof.nonce.is_zero()
-        && proof.code_hash
-            == H256::from_str(
-                "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
-            )?;
+    let is_empty =
+        proof.balance.is_zero() && proof.nonce.is_zero() && proof.code_hash == empty_hash();
     Ok((
         proof.account_proof,
         proof.storage_proof,
@@ -56,7 +56,9 @@ fn tracing_options() -> GethDebugTracingOptions {
 }
 
 fn contract_codes() -> HashMap<H256, Vec<u8>> {
-    vec![(keccak256([]).into(), vec![])].into_iter().collect()
+    let mut map = HashMap::new();
+    map.insert(empty_hash(), vec![]);
+    map
 }
 
 pub async fn prove_txn(hash: H256, provider: &Provider<Http>) -> Result<()> {
@@ -184,12 +186,6 @@ fn prove(
     dbg!(proof_run_res);
 }
 
-fn account_is_empty(account: &AccountState) -> bool {
-    (account.nonce.is_none() || account.nonce == Some(U256::zero()))
-        && (account.balance.is_none() || account.balance == Some(U256::zero()))
-        && (account.code.is_none() || account.code == Some("0x".to_string()))
-}
-
 pub async fn prove_block(block_number: u64, provider: &Provider<Http>) -> Result<()> {
     let block = provider
         .get_block(block_number)
@@ -200,7 +196,7 @@ pub async fn prove_block(block_number: u64, provider: &Provider<Http>) -> Result
     let mut contract_codes = contract_codes();
     let mut storage_tries = vec![];
     let mut txn_rlps = vec![];
-    let mut chain_id = U256::one();
+    let chain_id = U256::one();
     let mut alladdrs = vec![];
     if let Some(withdrawals) = &block.withdrawals {
         for withdrawal in withdrawals {
@@ -228,7 +224,7 @@ pub async fn prove_block(block_number: u64, provider: &Provider<Http>) -> Result
         let txn = txn
             .await?
             .ok_or_else(|| anyhow!("Transaction not found."))?;
-        // chain_id = txn.chain_id.unwrap();
+        // chain_id = txn.chain_id.unwrap(); // TODO: For type-0 txn, the chain_id is not set so the unwrap panics.
         let trace = provider
             .debug_trace_transaction(hash, tracing_options())
             .await?;
@@ -264,20 +260,11 @@ pub async fn prove_block(block_number: u64, provider: &Provider<Http>) -> Result
                 all_accounts.insert(address, account);
             }
         }
-        if txn.to
-            == Some(Address::from_str(
-                "0x2698931002B10A2206c3F8B36c8c168b01EA6c25",
-            )?)
-        {
-            dbg!(hex::encode(txn.rlp()));
-        }
         txn_rlps.push(txn.rlp().to_vec());
     }
-    dbg!(all_accounts.keys().collect::<Vec<_>>());
 
     for (address, account) in all_accounts {
         dbg!(address, &account);
-        // let account_is_empty = account_is_empty(&account);
         let AccountState { code, storage, .. } = account;
         let empty_storage = storage.is_none();
         let mut storage_keys = storage
@@ -295,11 +282,6 @@ pub async fn prove_block(block_number: u64, provider: &Provider<Http>) -> Result
                 "0xaed6fd5bd43de558ade6b05a13bf55867e47a421fec5cacb0af3ce9b8c9974c5",
             )?);
         }
-        if address == Address::from_str("0x50d1c9771902476076ecfc8b2a83ad6b9355a4c9")? {
-            for s in &storage_keys {
-                dbg!(s, keccak256(s));
-            }
-        }
         let (proof, storage_proof, storage_hash, account_is_empty) =
             get_proof(address, storage_keys, (block_number - 1).into(), provider).await?;
         dbg!(&storage_proof);
@@ -309,7 +291,7 @@ pub async fn prove_block(block_number: u64, provider: &Provider<Http>) -> Result
             key,
             proof,
             !account_is_empty,
-            &mut dont_touch_these_nibbles, // 1750190, 1751368
+            &mut dont_touch_these_nibbles,
         )?;
         if !empty_storage {
             let mut storage_trie = HashedPartialTrie::new(Node::Empty);
@@ -350,7 +332,6 @@ pub async fn prove_block(block_number: u64, provider: &Provider<Http>) -> Result
         .await?
         .ok_or_else(|| anyhow!("Block not found. Block number: {}", block_number - 1))?;
     assert_eq!(prev_block.state_root, trie.hash());
-    // panic!();
 
     let (block_metadata, final_hash) =
         get_block_metadata(block_number.into(), chain_id, provider).await?;
@@ -361,18 +342,6 @@ pub async fn prove_block(block_number: u64, provider: &Provider<Http>) -> Result
     } else {
         vec![]
     };
-    {
-        for addr in alladdrs {
-            // for addr in vec![Address::from_str(
-            //     "0x9bdae056643032a657f3945be80c0c9304add08b",
-            // )?] {
-            let proof = provider
-                .get_proof(addr, vec![], Some(block_number.into()))
-                .await?;
-            dbg!(proof);
-        }
-    }
-    // let txn_rlps = txn_rlps[..5].to_vec();
     prove_block_real_deal(
         txn_rlps,
         block_metadata,
@@ -414,7 +383,6 @@ fn prove_block_real_deal(
         inputs,
         &mut TimingTree::default(),
     );
-    dbg!(&proof_run_res);
     if let Ok((pv, _)) = proof_run_res {
         dbg!(&pv);
         dbg!(pv.trie_roots_after.state_root == final_hash);

@@ -1,10 +1,8 @@
 use anyhow::Result;
+use eth_proof::prove_block;
 use eth_proof::utils::init_env_logger;
-use eth_proof::{get_proof, prove_block, prove_txn};
 use ethers::prelude::*;
-use ethers::utils::rlp;
 use std::convert::TryFrom;
-use std::str::FromStr;
 
 #[tokio::main]
 async fn main() -> Result<()> {
