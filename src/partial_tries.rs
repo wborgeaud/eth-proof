@@ -20,8 +20,8 @@ pub fn insert_proof(
     };
     dbg!(nibbles);
     dbg!(&proof);
-    let _proof_len = proof.len();
-    for (_p_ind, p) in proof.into_iter().enumerate() {
+    let proof_len = proof.len();
+    for (p_ind, p) in proof.into_iter().enumerate() {
         let a = rlp::decode_list::<Vec<u8>>(&p);
         dbg!(current_prefix, nibbles, a.len());
         match a.len() {
@@ -64,10 +64,10 @@ pub fn insert_proof(
                         }
                         current_prefix.push_nibble_back(b);
                     }
-                    // if !insert_leaf && p_ind == proof_len - 1 {
-                    //     assert!(!a[1].is_empty());
-                    //     trie.insert(current_prefix, H256::from_slice(&a[1]));
-                    // }
+                    if !insert_leaf && p_ind == proof_len - 1 {
+                        assert!(!a[1].is_empty());
+                        trie.insert(current_prefix, H256::from_slice(&a[1]));
+                    }
                 }
                 1 => {
                     let b = a[0][0] & 0xf;
@@ -91,10 +91,10 @@ pub fn insert_proof(
                         }
                         current_prefix.push_nibble_back(b);
                     }
-                    // if !insert_leaf && p_ind == proof_len - 1 {
-                    //     assert!(!a[1].is_empty());
-                    //     trie.insert(current_prefix, H256::from_slice(&a[1]));
-                    // }
+                    if !insert_leaf && p_ind == proof_len - 1 {
+                        assert!(!a[1].is_empty());
+                        trie.insert(current_prefix, H256::from_slice(&a[1]));
+                    }
                 }
                 2 => {
                     dbg!(&a, nibbles);

@@ -16,6 +16,8 @@ flexi_logger = { version = "0.25.1", features = ["async"] }
 #eth_trie_utils = "0.6.0"
 eth_trie_utils = { path = "../../Mir/eth_trie_utils" }
 hex = "0.4.3"
+regex = "1.9"
+rand = "0.8.4"
 
 [patch."https://github.com/mir-protocol/plonky2.git"]
 plonky2_evm = { path= "../../Mir/plonky2/evm" }

@@ -1,6 +1,6 @@
 use anyhow::Result;
-use eth_proof::prove_block;
 use eth_proof::utils::init_env_logger;
+use eth_proof::{prove_block, prove_block_loop};
 use ethers::prelude::*;
 use std::convert::TryFrom;
 
@@ -13,7 +13,8 @@ async fn main() -> Result<()> {
     let args = std::env::args().collect::<Vec<_>>();
     // let txn = H256::from_str(&args[1])?;
     // prove_txn(txn, &provider).await?;
-    prove_block(args[1].parse().unwrap(), &provider).await?;
+    println!("Proving block {}", args[1]);
+    prove_block_loop(args[1].parse().unwrap(), &provider).await?;
 
     Ok(())
 }

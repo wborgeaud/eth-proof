@@ -2,12 +2,14 @@ mod partial_tries;
 pub mod utils;
 
 use ::core::panic;
+use rand::{thread_rng, Rng};
+use regex::Regex;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::str::FromStr;
 
 use crate::partial_tries::insert_proof;
 use anyhow::{anyhow, Result};
-use eth_trie_utils::nibbles::Nibbles;
+use eth_trie_utils::nibbles::{Nibble, Nibbles};
 use eth_trie_utils::partial_trie::{HashedPartialTrie, Node, PartialTrie};
 use ethers::prelude::*;
 use ethers::types::GethDebugTracerType;
@@ -186,7 +188,47 @@ fn prove(
     dbg!(proof_run_res);
 }
 
-pub async fn prove_block(block_number: u64, provider: &Provider<Http>) -> Result<()> {
+fn grind(nibs: Nibbles, depth: usize) -> Result<H256> {
+    let mut rng = thread_rng();
+    loop {
+        let bytes: [u8; 32] = rng.gen();
+        let h = keccak256(bytes);
+        let n = Nibbles::from_bytes_be(&h)?;
+        let n = n.truncate_n_nibbles_back(depth);
+        if n == nibs {
+            println!("{} {:?} {}", hex::encode(bytes), n, nibs);
+            return Ok(bytes.into());
+        }
+    }
+}
+
+pub async fn prove_block_loop(block_number: u64, provider: &Provider<Http>) -> Result<()> {
+    let mut slots = HashMap::new();
+    while let Some((nibble, address, slot, depth)) =
+        prove_block(block_number, &slots, provider).await?
+    {
+        println!(
+            "Block number: {}, nibble: {}, address: {}, slot: {}, depth: {}",
+            block_number, nibble, address, slot, depth
+        );
+        let mut bytes = [0; 32];
+        slot.to_big_endian(&mut bytes);
+        let h = keccak256(bytes);
+        let nibs = Nibbles::from_bytes_be(&h)?;
+        let mut nibs = nibs.truncate_n_nibbles_back(depth as usize);
+        nibs.push_nibble_back(nibble);
+        let s = grind(nibs, depth as usize - 1)?;
+        println!("{:?}", s);
+        println!("{:?}", hex::encode(&s));
+        slots.entry(address).or_insert_with(Vec::new).push(s);
+    }
+    Ok(())
+}
+pub async fn prove_block(
+    block_number: u64,
+    slots: &HashMap<Address, Vec<H256>>,
+    provider: &Provider<Http>,
+) -> Result<Option<(u8, Address, U256, u8)>> {
     let block = provider
         .get_block(block_number)
         .await?
@@ -238,9 +280,6 @@ pub async fn prove_block(block_number: u64, provider: &Provider<Http>) -> Result
         };
         for (address, account) in accounts {
             alladdrs.push(address);
-            if address == H160::from_str("0xd3b6e89a72fdd628d87168979fe7075e1ee21bb4")? {
-                dbg!(&account);
-            }
             if let Some(acc) = all_accounts.get(&address) {
                 let mut acc = acc.clone();
                 let mut new_store = acc.storage.clone().unwrap_or_default();
@@ -272,15 +311,20 @@ pub async fn prove_block(block_number: u64, provider: &Provider<Http>) -> Result
             .keys()
             .copied()
             .collect::<Vec<_>>();
-        if address == Address::from_str("0xa0e4a0ba6ac72d327b5ea8552379bfeac10b2191")? {
-            storage_keys.push(H256::from_str(
-                "0x2b5eb822a94e5a95d8bbbbe98455f9c5ede1047ad1e9476e52a254cae3ebe7b8",
-            )?);
-        }
-        if address == Address::from_str("0x76be3b62873462d2142405439777e971754e8e77")? {
-            storage_keys.push(H256::from_str(
-                "0xaed6fd5bd43de558ade6b05a13bf55867e47a421fec5cacb0af3ce9b8c9974c5",
-            )?);
+        // if address == Address::from_str("0xa0e4a0ba6ac72d327b5ea8552379bfeac10b2191")? {
+        //     storage_keys.push(H256::from_str(
+        //         "0x2b5eb822a94e5a95d8bbbbe98455f9c5ede1047ad1e9476e52a254cae3ebe7b8",
+        //     )?);
+        // }
+        // if address == Address::from_str("0x76be3b62873462d2142405439777e971754e8e77")? {
+        //     storage_keys.push(H256::from_str(
+        //         "0xaed6fd5bd43de558ade6b05a13bf55867e47a421fec5cacb0af3ce9b8c9974c5",
+        //     )?);
+        // }
+        if let Some(v) = slots.get(&address) {
+            for slot in v {
+                storage_keys.push(*slot);
+            }
         }
         let (proof, storage_proof, storage_hash, account_is_empty) =
             get_proof(address, storage_keys, (block_number - 1).into(), provider).await?;
@@ -342,7 +386,7 @@ pub async fn prove_block(block_number: u64, provider: &Provider<Http>) -> Result
     } else {
         vec![]
     };
-    prove_block_real_deal(
+    if let Err(t) = prove_block_real_deal(
         txn_rlps,
         block_metadata,
         trie,
@@ -350,9 +394,11 @@ pub async fn prove_block(block_number: u64, provider: &Provider<Http>) -> Result
         storage_tries,
         withdrawals,
         final_hash,
-    );
+    ) {
+        return Ok(Some(t));
+    };
 
-    Ok(())
+    Ok(None)
 }
 
 fn prove_block_real_deal(
@@ -363,7 +409,7 @@ fn prove_block_real_deal(
     storage_tries: Vec<(H256, HashedPartialTrie)>,
     withdrawals: Vec<(Address, U256)>,
     final_hash: H256,
-) {
+) -> Result<(), (u8, Address, U256, u8)> {
     let inputs = GenerationInputs {
         signed_txns,
         tries: TrieInputs {
@@ -383,8 +429,23 @@ fn prove_block_real_deal(
         inputs,
         &mut TimingTree::default(),
     );
+    dbg!(&proof_run_res);
+    if let Err(e) = &proof_run_res {
+        let s = format!("{:?}", e);
+        println!("{}", s);
+        let re = Regex::new(r"KernelPanic in kernel at pc=delete_hash_node_branch, stack=\[(\d+),[\s\d*,]*\], memory=\[.*\], last_storage_slot=Some\(\((.*), (.*), (.*)\)\)").unwrap();
+        if let Some(cap) = re.captures(&s) {
+            let nibble = cap.get(1).unwrap().as_str().parse().unwrap();
+            let address = Address::from_str(cap.get(2).unwrap().as_str()).unwrap();
+            let slot = U256::from_dec_str(cap.get(3).unwrap().as_str()).unwrap();
+            let depth = cap.get(4).unwrap().as_str().parse().unwrap();
+            dbg!(nibble, address, slot, depth);
+            return Err((nibble, address, slot, depth));
+        }
+    };
     if let Ok((pv, _)) = proof_run_res {
         dbg!(&pv);
         dbg!(pv.trie_roots_after.state_root == final_hash);
     }
+    Ok(())
 }
