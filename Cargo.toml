@@ -17,9 +17,7 @@ hex = "0.4.3"
 regex = "1.9"
 rand = "0.8.4"
 
-[patch."https://github.com/mir-protocol/plonky2.git"]
-plonky2_evm = { path= "../../Mir/plonky2/evm" }
-
 [patch.crates-io]
 #plonky2 = { git = "https://github.com/mir-protocol/plonky2.git", rev = "6fa59d204fbdf780c02bce41edc1144f436e49e1" }
-plonky2 = { git = "https://github.com/mir-protocol/plonky2.git", rev = "202985b24f79b354cfdfa2e5c5288e5fbc3f1a41" }
+#plonky2 = { git = "https://github.com/mir-protocol/plonky2.git", rev = "202985b24f79b354cfdfa2e5c5288e5fbc3f1a41" }
+plonky2 = { git = "https://github.com/mir-protocol/plonky2", branch = "prove_historical_blocks" }
