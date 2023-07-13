@@ -6,6 +6,8 @@ use eth_trie_utils::partial_trie::{HashedPartialTrie, PartialTrie};
 use ethers::prelude::*;
 use ethers::utils::rlp;
 
+/// Reconstruct a Merkle-Patricia partial trie from a MPT proof.
+/// Can be an account proof for the state MPT or a storage proof for the storage MPT.
 pub fn insert_proof(
     trie: &mut HashedPartialTrie,
     key: [u8; 32],
@@ -18,12 +20,9 @@ pub fn insert_proof(
         count: 0,
         packed: U256::zero(),
     };
-    dbg!(nibbles);
-    dbg!(&proof);
     let proof_len = proof.len();
     for (p_ind, p) in proof.into_iter().enumerate() {
         let a = rlp::decode_list::<Vec<u8>>(&p);
-        dbg!(current_prefix, nibbles, a.len());
         match a.len() {
             17 => {
                 let nibble = nibbles.pop_next_nibble_front();
@@ -40,7 +39,9 @@ pub fn insert_proof(
                     if dont_touch_these_nibbles.contains(&new_prefix) {
                         continue;
                     }
-                    if !a[i as usize].is_empty() && !trie.whatsup(&mut new_prefix.clone()) {
+                    if !a[i as usize].is_empty()
+                        && !trie.is_not_empty_or_hash(&mut new_prefix.clone())
+                    {
                         let hash = H256::from_slice(&a[i as usize]);
                         trie.insert(new_prefix, hash);
                     }
