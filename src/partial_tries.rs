@@ -98,7 +98,6 @@ pub fn insert_proof(
                     }
                 }
                 2 => {
-                    dbg!(&a, nibbles);
                     let leaf_prefix = &a[0][1..];
                     for &byte in leaf_prefix {
                         let b = byte >> 4;
@@ -121,7 +120,6 @@ pub fn insert_proof(
                 }
                 3 => {
                     let b = a[0][0] & 0xf;
-                    dbg!(&a);
                     let nibble = nibbles.pop_next_nibble_front();
                     if insert_leaf {
                         assert_eq!(b, nibble);
