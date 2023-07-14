@@ -6,7 +6,8 @@ To prove the block with block number `B`, run
 RPC_URL=YOUR_RPC_URL cargo run --release -- B
 ```
 
-This requires an RPC node that supports `debug_traceTransaction`.
+- Only works for blocks after the Shanghai upgrade `B>17032521`.
+- Requires an RPC node that supports `debug_traceTransaction`.
 
 ## TODOs
 
