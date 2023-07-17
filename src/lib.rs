@@ -6,6 +6,7 @@ use rand::{thread_rng, Rng};
 use regex::Regex;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::str::FromStr;
+use std::vec;
 
 use crate::partial_tries::insert_proof;
 use anyhow::{anyhow, Result};
@@ -278,7 +279,7 @@ async fn prove_block(
     } else {
         vec![]
     };
-    if let Err(t) = prove_block_real_deal(
+    if let Err(t) = prove_block_all_txns(
         txn_rlps,
         block_metadata,
         trie,
@@ -291,6 +292,120 @@ async fn prove_block(
     };
 
     Ok(None)
+}
+
+fn prove_block_all_txns(
+    signed_txns: Vec<Vec<u8>>,
+    block_metadata: BlockMetadata,
+    state_trie: HashedPartialTrie,
+    contract_code: HashMap<H256, Vec<u8>>,
+    storage_tries: Vec<(H256, HashedPartialTrie)>,
+    withdrawals: Vec<(Address, U256)>,
+    final_hash: H256,
+) -> Result<(), (u8, Address, U256, u8)> {
+    let (_root_before, mut root_after, mut trie_data) = prove_block_txn(
+        signed_txns[0].clone(),
+        block_metadata.clone(),
+        TrieOrTrieData::Trie(state_trie),
+        contract_code.clone(),
+        storage_tries.clone(),
+        if signed_txns.len() == 1 {
+            withdrawals.clone()
+        } else {
+            vec![]
+        },
+        final_hash,
+    )?;
+
+    for i in 1..signed_txns.len() {
+        println!("Txn {}", i);
+        let (next_root_before, next_root_after, trie_data_after) = prove_block_txn(
+            signed_txns[i].clone(),
+            block_metadata.clone(),
+            TrieOrTrieData::TrieData(trie_data),
+            contract_code.clone(),
+            storage_tries.clone(),
+            if i == signed_txns.len() - 1 {
+                withdrawals.clone()
+            } else {
+                vec![]
+            },
+            final_hash,
+        )?;
+        assert_eq!(next_root_before, root_after);
+        root_after = next_root_after;
+        trie_data = trie_data_after;
+    }
+    assert_eq!(root_after, final_hash);
+    println!("Success: {}", root_after == final_hash);
+
+    Ok(())
+}
+
+enum TrieOrTrieData {
+    Trie(HashedPartialTrie),
+    TrieData(Vec<U256>),
+}
+
+fn prove_block_txn(
+    signed_txn: Vec<u8>,
+    block_metadata: BlockMetadata,
+    state_trie: TrieOrTrieData,
+    contract_code: HashMap<H256, Vec<u8>>,
+    storage_tries: Vec<(H256, HashedPartialTrie)>,
+    withdrawals: Vec<(Address, U256)>,
+    final_hash: H256,
+) -> Result<(H256, H256, Vec<U256>), (u8, Address, U256, u8)> {
+    let (hashed_trie, trie_data) = match state_trie {
+        TrieOrTrieData::Trie(t) => (t, vec![U256::zero()]),
+        TrieOrTrieData::TrieData(t) => (HashedPartialTrie::new(Node::Empty), t),
+    };
+    let inputs = GenerationInputs {
+        signed_txns: vec![signed_txn],
+        tries: TrieInputs {
+            state_trie: hashed_trie,
+            transactions_trie: Default::default(),
+            receipts_trie: Default::default(),
+            storage_tries,
+        },
+        withdrawals,
+        contract_code,
+        block_metadata,
+        addresses: vec![],
+        trie_data,
+    };
+    let proof_run_res = dont_prove_with_outputs::<GoldilocksField, KeccakGoldilocksConfig, 2>(
+        &AllStark::default(),
+        &StarkConfig::standard_fast_config(),
+        inputs,
+        &mut TimingTree::default(),
+    );
+    if let Err(e) = &proof_run_res {
+        let s = format!("{:?}", e);
+        let re = Regex::new(r"KernelPanic in kernel at pc=delete_hash_node_branch, stack=\[(\d+),[\s\d*,]*\], memory=\[.*\], last_storage_slot=Some\(\((.*), (.*), (.*)\)\)").unwrap();
+        if let Some(cap) = re.captures(&s) {
+            let nibble = cap.get(1).unwrap().as_str().parse().unwrap();
+            let address = Address::from_str(cap.get(2).unwrap().as_str()).unwrap();
+            let slot = U256::from_dec_str(cap.get(3).unwrap().as_str()).unwrap();
+            let depth = cap.get(4).unwrap().as_str().parse().unwrap();
+            return Err((nibble, address, slot, depth));
+        }
+    };
+    if let Ok((pv, outputs)) = proof_run_res {
+        println!("Success: {}", pv.trie_roots_after.state_root == final_hash);
+        println!(
+            "Trie data size: {} {}",
+            outputs.trie_data.len(),
+            outputs.trie_data[0]
+        );
+        Ok((
+            pv.trie_roots_before.state_root,
+            pv.trie_roots_after.state_root,
+            outputs.trie_data,
+        ))
+    } else {
+        unreachable!()
+    }
 }
 
 /// Actually prove the block using Plonky2.
@@ -317,6 +432,7 @@ fn prove_block_real_deal(
         contract_code,
         block_metadata,
         addresses: vec![],
+        trie_data: vec![U256::zero()],
     };
     let proof_run_res = dont_prove_with_outputs::<GoldilocksField, KeccakGoldilocksConfig, 2>(
         &AllStark::default(),
@@ -335,8 +451,13 @@ fn prove_block_real_deal(
             return Err((nibble, address, slot, depth));
         }
     };
-    if let Ok((pv, _)) = proof_run_res {
+    if let Ok((pv, outputs)) = proof_run_res {
         println!("Success: {}", pv.trie_roots_after.state_root == final_hash);
+        println!(
+            "Trie data size: {} {}",
+            outputs.trie_data.len(),
+            outputs.trie_data[0]
+        );
     }
     Ok(())
 }
