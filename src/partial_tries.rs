@@ -16,10 +16,7 @@ pub fn insert_proof(
     dont_touch_these_nibbles: &mut HashSet<Nibbles>,
 ) -> Result<()> {
     let mut nibbles = Nibbles::from_bytes_be(&key)?;
-    let mut current_prefix = Nibbles {
-        count: 0,
-        packed: U256::zero(),
-    };
+    let mut current_prefix = Nibbles::default();
     let proof_len = proof.len();
     for (p_ind, p) in proof.into_iter().enumerate() {
         let a = rlp::decode_list::<Vec<u8>>(&p);
@@ -40,7 +37,7 @@ pub fn insert_proof(
                         continue;
                     }
                     if !a[i as usize].is_empty()
-                        && !trie.is_not_empty_or_hash(&mut new_prefix.clone())
+                        && !is_not_empty_or_hash(trie, &mut new_prefix.clone())
                     {
                         let hash = H256::from_slice(&a[i as usize]);
                         trie.insert(new_prefix, hash);
@@ -152,4 +149,9 @@ pub fn insert_proof(
     }
 
     Ok(())
+}
+
+fn is_not_empty_or_hash(trie: &HashedPartialTrie, prefix: &mut Nibbles) -> bool {
+    // Alright... Next version of `eth_trie_utils` will get some needed QOL features... I shouldn't need to do this manually haha.
+    todo!()
 }

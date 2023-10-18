@@ -22,7 +22,6 @@ use plonky2_evm::all_stark::AllStark;
 use plonky2_evm::config::StarkConfig;
 use plonky2_evm::generation::{GenerationInputs, TrieInputs};
 use plonky2_evm::proof::BlockMetadata;
-use plonky2_evm::prover::dont_prove_with_outputs;
 
 /// Keccak of empty bytes.
 const EMPTY_HASH: H256 = H256([
@@ -84,9 +83,12 @@ pub async fn get_block_metadata(
             block_timestamp: block.timestamp,
             block_number: U256([block_number.0[0], 0, 0, 0]),
             block_difficulty: block.difficulty,
+            block_random: todo!(),
             block_gaslimit: block.gas_limit,
             block_chain_id,
             block_base_fee: block.base_fee_per_gas.unwrap(),
+            block_gas_used: todo!(),
+            block_bloom: todo!(),
         },
         block.state_root,
     ))
@@ -306,6 +308,11 @@ fn prove_block_real_deal(
     final_hash: H256,
 ) -> Result<(), (u8, Address, U256, u8)> {
     let inputs = GenerationInputs {
+        txn_number_before: todo!(),
+        gas_used_before: todo!(),
+        block_bloom_before: todo!(),
+        gas_used_after: todo!(),
+        block_bloom_after: todo!(),
         signed_txns,
         tries: TrieInputs {
             state_trie,
@@ -313,31 +320,36 @@ fn prove_block_real_deal(
             receipts_trie: Default::default(),
             storage_tries,
         },
-        withdrawals,
+        trie_roots_after: todo!(),
+        genesis_state_trie_root: todo!(),
         contract_code,
         block_metadata,
+        block_hashes: todo!(),
         addresses: vec![],
     };
-    let proof_run_res = dont_prove_with_outputs::<GoldilocksField, KeccakGoldilocksConfig, 2>(
-        &AllStark::default(),
-        &StarkConfig::standard_fast_config(),
-        inputs,
-        &mut TimingTree::default(),
-    );
-    if let Err(e) = &proof_run_res {
-        let s = format!("{:?}", e);
-        let re = Regex::new(r"KernelPanic in kernel at pc=delete_hash_node_branch, stack=\[(\d+),[\s\d*,]*\], memory=\[.*\], last_storage_slot=Some\(\((.*), (.*), (.*)\)\)").unwrap();
-        if let Some(cap) = re.captures(&s) {
-            let nibble = cap.get(1).unwrap().as_str().parse().unwrap();
-            let address = Address::from_str(cap.get(2).unwrap().as_str()).unwrap();
-            let slot = U256::from_dec_str(cap.get(3).unwrap().as_str()).unwrap();
-            let depth = cap.get(4).unwrap().as_str().parse().unwrap();
-            return Err((nibble, address, slot, depth));
-        }
-    };
-    if let Ok((pv, _)) = proof_run_res {
-        println!("Success: {}", pv.trie_roots_after.state_root == final_hash);
-    }
+
+    todo!();
+
+    // let proof_run_res = dont_prove_with_outputs::<GoldilocksField, KeccakGoldilocksConfig, 2>(
+    //     &AllStark::default(),
+    //     &StarkConfig::standard_fast_config(),
+    //     inputs,
+    //     &mut TimingTree::default(),
+    // );
+    // if let Err(e) = &proof_run_res {
+    //     let s = format!("{:?}", e);
+    //     let re = Regex::new(r"KernelPanic in kernel at pc=delete_hash_node_branch, stack=\[(\d+),[\s\d*,]*\], memory=\[.*\], last_storage_slot=Some\(\((.*), (.*), (.*)\)\)").unwrap();
+    //     if let Some(cap) = re.captures(&s) {
+    //         let nibble = cap.get(1).unwrap().as_str().parse().unwrap();
+    //         let address = Address::from_str(cap.get(2).unwrap().as_str()).unwrap();
+    //         let slot = U256::from_dec_str(cap.get(3).unwrap().as_str()).unwrap();
+    //         let depth = cap.get(4).unwrap().as_str().parse().unwrap();
+    //         return Err((nibble, address, slot, depth));
+    //     }
+    // };
+    // if let Ok((pv, _)) = proof_run_res {
+    //     println!("Success: {}", pv.trie_roots_after.state_root == final_hash);
+    // }
     Ok(())
 }
 
