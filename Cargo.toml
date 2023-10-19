@@ -9,14 +9,16 @@ edition = "2021"
 ethers = "2.0.7"
 tokio = { version = "1", features = ["full"] }
 anyhow = "1.0.71"
-plonky2 = { git = "https://github.com/0xPolygonZero/plonky2", rev = "29fdd3e372c721d65ada7363a1554202e7ab0e7b" }
-plonky2_evm = { git = "https://github.com/0xPolygonZero/plonky2", rev = "29fdd3e372c721d65ada7363a1554202e7ab0e7b" }
-proof_protocol_decoder = { git = "https://github.com/0xPolygonZero/proof-protocol-decoder", rev = "076d51df6589fe24a4bc82607223a06492ae6b8f" }
+plonky_block_proof_gen = { git = "https://github.com/0xPolygonZero/plonky-block-proof-gen.git", rev = "5a55f695aedb47218242aec1191fd01c61e8f1d2" }
+plonky2 = { git = "https://github.com/0xPolygonZero/plonky2", rev = "49976ea2a98dcb6052bd6cf3a65f730e55727330" }
+plonky2_evm = { git = "https://github.com/0xPolygonZero/plonky2", rev = "49976ea2a98dcb6052bd6cf3a65f730e55727330" }
+proof_protocol_decoder = { git = "https://github.com/0xPolygonZero/proof-protocol-decoder", rev = "ddd9a3600a7159b5f7fde2330f00a403224e2161" }
 flexi_logger = { version = "0.25.1", features = ["async"] }
 eth_trie_utils = { git = "https://github.com/0xPolygonZero/eth_trie_utils", rev = "e9ec4ec2aa2ae976b7c699ef40c1ffc716d87ed5" }
 hex = "0.4.3"
 regex = "1.9"
 rand = "0.8.4"
 
-[patch.crates-io]
-plonky2 = { git = "https://github.com/0xPolygonZero/plonky2", rev = "29fdd3e372c721d65ada7363a1554202e7ab0e7b" }
+[patch."https://github.com/0xPolygonZero/plonky2"]
+plonky2 = { git = "https://github.com/0xPolygonZero/plonky2?", rev = "49976ea2a98dcb6052bd6cf3a65f730e55727330" }
+plonky2_evm = { git = "https://github.com/0xPolygonZero/plonky2?", rev = "49976ea2a98dcb6052bd6cf3a65f730e55727330" }

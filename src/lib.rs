@@ -1,4 +1,5 @@
 mod partial_tries;
+mod proof_protocol;
 pub mod utils;
 
 use ::core::panic;
@@ -8,6 +9,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::str::FromStr;
 
 use crate::partial_tries::insert_proof;
+use crate::utils::tracing_options;
 use anyhow::{anyhow, Result};
 use eth_trie_utils::nibbles::Nibbles;
 use eth_trie_utils::partial_trie::{HashedPartialTrie, Node, PartialTrie};
@@ -46,17 +48,6 @@ pub async fn get_proof(
         proof.storage_hash,
         is_empty,
     ))
-}
-
-/// Tracing options for the debug_traceTransaction call.
-fn tracing_options() -> GethDebugTracingOptions {
-    GethDebugTracingOptions {
-        tracer: Some(GethDebugTracerType::BuiltInTracer(
-            GethDebugBuiltInTracerType::PreStateTracer,
-        )),
-
-        ..GethDebugTracingOptions::default()
-    }
 }
 
 /// Hash map from code hash to code.

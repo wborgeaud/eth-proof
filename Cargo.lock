@@ -829,13 +829,14 @@ name = "eth-proof"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "eth_trie_utils 0.6.0 (git+https://github.com/0xPolygonZero/eth_trie_utils?rev=e9ec4ec2aa2ae976b7c699ef40c1ffc716d87ed5)",
+ "eth_trie_utils",
  "ethers",
  "flexi_logger",
  "hex",
- "plonky2 0.1.4 (git+https://github.com/0xPolygonZero/plonky2?rev=29fdd3e372c721d65ada7363a1554202e7ab0e7b)",
- "plonky2_evm 0.1.1 (git+https://github.com/0xPolygonZero/plonky2?rev=29fdd3e372c721d65ada7363a1554202e7ab0e7b)",
- "proof_protocol_decoder",
+ "plonky2",
+ "plonky2_evm",
+ "plonky_block_proof_gen",
+ "proof_protocol_decoder 0.1.0 (git+https://github.com/0xPolygonZero/proof-protocol-decoder?rev=ddd9a3600a7159b5f7fde2330f00a403224e2161)",
  "rand",
  "regex",
  "tokio",
@@ -845,25 +846,6 @@ dependencies = [
 name = "eth_trie_utils"
 version = "0.6.0"
 source = "git+https://github.com/0xPolygonZero/eth_trie_utils?rev=e9ec4ec2aa2ae976b7c699ef40c1ffc716d87ed5#e9ec4ec2aa2ae976b7c699ef40c1ffc716d87ed5"
-dependencies = [
- "bytes",
- "enum-as-inner",
- "ethereum-types",
- "hex",
- "keccak-hash 0.10.0",
- "log",
- "num-traits",
- "parking_lot",
- "rlp",
- "serde",
- "thiserror",
- "uint",
-]
-
-[[package]]
-name = "eth_trie_utils"
-version = "0.6.0"
-source = "git+https://github.com/mir-protocol/eth_trie_utils?rev=e9ec4ec2aa2ae976b7c699ef40c1ffc716d87ed5#e9ec4ec2aa2ae976b7c699ef40c1ffc716d87ed5"
 dependencies = [
  "bytes",
  "enum-as-inner",
@@ -2225,6 +2207,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "paste"
+version = "1.0.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "de3145af08024dea9fa9914f381a17b8fc6034dfb00f3a84013f7ff43f29ed4c"
+
+[[package]]
 name = "path-slash"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2434,7 +2422,7 @@ checksum = "26072860ba924cbfa98ea39c8c19b4dd6a4a25423dbdf219c1eca91aa0cf6964"
 [[package]]
 name = "plonky2"
 version = "0.1.4"
-source = "git+https://github.com/mir-protocol/plonky2.git?rev=0b5ac312c0f9efdcc6d85c10256d2843d42215a2#0b5ac312c0f9efdcc6d85c10256d2843d42215a2"
+source = "git+https://github.com/0xPolygonZero/plonky2??rev=49976ea2a98dcb6052bd6cf3a65f730e55727330#49976ea2a98dcb6052bd6cf3a65f730e55727330"
 dependencies = [
  "ahash",
  "anyhow",
@@ -2444,32 +2432,9 @@ dependencies = [
  "keccak-hash 0.8.0",
  "log",
  "num",
- "plonky2_field 0.1.1 (git+https://github.com/mir-protocol/plonky2.git?rev=0b5ac312c0f9efdcc6d85c10256d2843d42215a2)",
- "plonky2_maybe_rayon 0.1.1 (git+https://github.com/mir-protocol/plonky2.git?rev=0b5ac312c0f9efdcc6d85c10256d2843d42215a2)",
- "plonky2_util 0.1.1 (git+https://github.com/mir-protocol/plonky2.git?rev=0b5ac312c0f9efdcc6d85c10256d2843d42215a2)",
- "rand",
- "serde",
- "serde_json",
- "static_assertions",
- "unroll",
-]
-
-[[package]]
-name = "plonky2"
-version = "0.1.4"
-source = "git+https://github.com/0xPolygonZero/plonky2?rev=29fdd3e372c721d65ada7363a1554202e7ab0e7b#29fdd3e372c721d65ada7363a1554202e7ab0e7b"
-dependencies = [
- "ahash",
- "anyhow",
- "getrandom",
- "hashbrown 0.14.1",
- "itertools 0.11.0",
- "keccak-hash 0.8.0",
- "log",
- "num",
- "plonky2_field 0.1.1 (git+https://github.com/0xPolygonZero/plonky2?rev=29fdd3e372c721d65ada7363a1554202e7ab0e7b)",
- "plonky2_maybe_rayon 0.1.1 (git+https://github.com/0xPolygonZero/plonky2?rev=29fdd3e372c721d65ada7363a1554202e7ab0e7b)",
- "plonky2_util 0.1.1 (git+https://github.com/0xPolygonZero/plonky2?rev=29fdd3e372c721d65ada7363a1554202e7ab0e7b)",
+ "plonky2_field",
+ "plonky2_maybe_rayon",
+ "plonky2_util",
  "rand",
  "rand_chacha",
  "serde",
@@ -2481,12 +2446,12 @@ dependencies = [
 [[package]]
 name = "plonky2_evm"
 version = "0.1.1"
-source = "git+https://github.com/mir-protocol/plonky2.git?rev=0b5ac312c0f9efdcc6d85c10256d2843d42215a2#0b5ac312c0f9efdcc6d85c10256d2843d42215a2"
+source = "git+https://github.com/0xPolygonZero/plonky2??rev=49976ea2a98dcb6052bd6cf3a65f730e55727330#49976ea2a98dcb6052bd6cf3a65f730e55727330"
 dependencies = [
  "anyhow",
  "bytes",
  "env_logger",
- "eth_trie_utils 0.6.0 (git+https://github.com/mir-protocol/eth_trie_utils?rev=e9ec4ec2aa2ae976b7c699ef40c1ffc716d87ed5)",
+ "eth_trie_utils",
  "ethereum-types",
  "hashbrown 0.14.1",
  "hex-literal",
@@ -2499,43 +2464,9 @@ dependencies = [
  "once_cell",
  "pest",
  "pest_derive",
- "plonky2 0.1.4 (git+https://github.com/mir-protocol/plonky2.git?rev=0b5ac312c0f9efdcc6d85c10256d2843d42215a2)",
- "plonky2_maybe_rayon 0.1.1 (git+https://github.com/mir-protocol/plonky2.git?rev=0b5ac312c0f9efdcc6d85c10256d2843d42215a2)",
- "plonky2_util 0.1.1 (git+https://github.com/mir-protocol/plonky2.git?rev=0b5ac312c0f9efdcc6d85c10256d2843d42215a2)",
- "rand",
- "rand_chacha",
- "rlp",
- "rlp-derive",
- "serde",
- "serde_json",
- "static_assertions",
- "tiny-keccak",
-]
-
-[[package]]
-name = "plonky2_evm"
-version = "0.1.1"
-source = "git+https://github.com/0xPolygonZero/plonky2?rev=29fdd3e372c721d65ada7363a1554202e7ab0e7b#29fdd3e372c721d65ada7363a1554202e7ab0e7b"
-dependencies = [
- "anyhow",
- "bytes",
- "env_logger",
- "eth_trie_utils 0.6.0 (git+https://github.com/0xPolygonZero/eth_trie_utils?rev=e9ec4ec2aa2ae976b7c699ef40c1ffc716d87ed5)",
- "ethereum-types",
- "hashbrown 0.14.1",
- "hex-literal",
- "itertools 0.11.0",
- "jemallocator",
- "keccak-hash 0.10.0",
- "log",
- "num",
- "num-bigint",
- "once_cell",
- "pest",
- "pest_derive",
- "plonky2 0.1.4 (git+https://github.com/0xPolygonZero/plonky2?rev=29fdd3e372c721d65ada7363a1554202e7ab0e7b)",
- "plonky2_maybe_rayon 0.1.1 (git+https://github.com/0xPolygonZero/plonky2?rev=29fdd3e372c721d65ada7363a1554202e7ab0e7b)",
- "plonky2_util 0.1.1 (git+https://github.com/0xPolygonZero/plonky2?rev=29fdd3e372c721d65ada7363a1554202e7ab0e7b)",
+ "plonky2",
+ "plonky2_maybe_rayon",
+ "plonky2_util",
  "rand",
  "rand_chacha",
  "rlp",
@@ -2549,27 +2480,12 @@ dependencies = [
 [[package]]
 name = "plonky2_field"
 version = "0.1.1"
-source = "git+https://github.com/mir-protocol/plonky2.git?rev=0b5ac312c0f9efdcc6d85c10256d2843d42215a2#0b5ac312c0f9efdcc6d85c10256d2843d42215a2"
+source = "git+https://github.com/0xPolygonZero/plonky2??rev=49976ea2a98dcb6052bd6cf3a65f730e55727330#49976ea2a98dcb6052bd6cf3a65f730e55727330"
 dependencies = [
  "anyhow",
  "itertools 0.11.0",
  "num",
- "plonky2_util 0.1.1 (git+https://github.com/mir-protocol/plonky2.git?rev=0b5ac312c0f9efdcc6d85c10256d2843d42215a2)",
- "rand",
- "serde",
- "static_assertions",
- "unroll",
-]
-
-[[package]]
-name = "plonky2_field"
-version = "0.1.1"
-source = "git+https://github.com/0xPolygonZero/plonky2?rev=29fdd3e372c721d65ada7363a1554202e7ab0e7b#29fdd3e372c721d65ada7363a1554202e7ab0e7b"
-dependencies = [
- "anyhow",
- "itertools 0.11.0",
- "num",
- "plonky2_util 0.1.1 (git+https://github.com/0xPolygonZero/plonky2?rev=29fdd3e372c721d65ada7363a1554202e7ab0e7b)",
+ "plonky2_util",
  "rand",
  "serde",
  "static_assertions",
@@ -2579,15 +2495,7 @@ dependencies = [
 [[package]]
 name = "plonky2_maybe_rayon"
 version = "0.1.1"
-source = "git+https://github.com/mir-protocol/plonky2.git?rev=0b5ac312c0f9efdcc6d85c10256d2843d42215a2#0b5ac312c0f9efdcc6d85c10256d2843d42215a2"
-dependencies = [
- "rayon",
-]
-
-[[package]]
-name = "plonky2_maybe_rayon"
-version = "0.1.1"
-source = "git+https://github.com/0xPolygonZero/plonky2?rev=29fdd3e372c721d65ada7363a1554202e7ab0e7b#29fdd3e372c721d65ada7363a1554202e7ab0e7b"
+source = "git+https://github.com/0xPolygonZero/plonky2??rev=49976ea2a98dcb6052bd6cf3a65f730e55727330#49976ea2a98dcb6052bd6cf3a65f730e55727330"
 dependencies = [
  "rayon",
 ]
@@ -2595,12 +2503,21 @@ dependencies = [
 [[package]]
 name = "plonky2_util"
 version = "0.1.1"
-source = "git+https://github.com/mir-protocol/plonky2.git?rev=0b5ac312c0f9efdcc6d85c10256d2843d42215a2#0b5ac312c0f9efdcc6d85c10256d2843d42215a2"
+source = "git+https://github.com/0xPolygonZero/plonky2??rev=49976ea2a98dcb6052bd6cf3a65f730e55727330#49976ea2a98dcb6052bd6cf3a65f730e55727330"
 
 [[package]]
-name = "plonky2_util"
-version = "0.1.1"
-source = "git+https://github.com/0xPolygonZero/plonky2?rev=29fdd3e372c721d65ada7363a1554202e7ab0e7b#29fdd3e372c721d65ada7363a1554202e7ab0e7b"
+name = "plonky_block_proof_gen"
+version = "0.1.0"
+source = "git+https://github.com/0xPolygonZero/plonky-block-proof-gen.git?rev=5a55f695aedb47218242aec1191fd01c61e8f1d2#5a55f695aedb47218242aec1191fd01c61e8f1d2"
+dependencies = [
+ "ethereum-types",
+ "log",
+ "paste",
+ "plonky2",
+ "plonky2_evm",
+ "proof_protocol_decoder 0.1.0 (git+https://github.com/0xPolygonZero/proof-protocol-decoder?rev=b69b1d4032d777699366706525d1979aa19ecb21)",
+ "serde",
+]
 
 [[package]]
 name = "powerfmt"
@@ -2706,13 +2623,29 @@ dependencies = [
 [[package]]
 name = "proof_protocol_decoder"
 version = "0.1.0"
-source = "git+https://github.com/0xPolygonZero/proof-protocol-decoder?rev=076d51df6589fe24a4bc82607223a06492ae6b8f#076d51df6589fe24a4bc82607223a06492ae6b8f"
+source = "git+https://github.com/0xPolygonZero/proof-protocol-decoder?rev=b69b1d4032d777699366706525d1979aa19ecb21#b69b1d4032d777699366706525d1979aa19ecb21"
 dependencies = [
- "eth_trie_utils 0.6.0 (git+https://github.com/mir-protocol/eth_trie_utils?rev=e9ec4ec2aa2ae976b7c699ef40c1ffc716d87ed5)",
+ "eth_trie_utils",
  "ethereum-types",
  "hex",
  "keccak-hash 0.10.0",
- "plonky2_evm 0.1.1 (git+https://github.com/mir-protocol/plonky2.git?rev=0b5ac312c0f9efdcc6d85c10256d2843d42215a2)",
+ "plonky2_evm",
+ "rlp",
+ "rlp-derive",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
+name = "proof_protocol_decoder"
+version = "0.1.0"
+source = "git+https://github.com/0xPolygonZero/proof-protocol-decoder?rev=ddd9a3600a7159b5f7fde2330f00a403224e2161#ddd9a3600a7159b5f7fde2330f00a403224e2161"
+dependencies = [
+ "eth_trie_utils",
+ "ethereum-types",
+ "hex",
+ "keccak-hash 0.10.0",
+ "plonky2_evm",
  "rlp",
  "rlp-derive",
  "serde",
